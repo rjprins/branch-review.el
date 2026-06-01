@@ -19,7 +19,7 @@ jobs:
             allow_failure: true
     continue-on-error: ${{ matrix.allow_failure == true }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Emacs ${{ matrix.emacs_version }}
         uses: purcell/setup-emacs@master
