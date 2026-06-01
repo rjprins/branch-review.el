@@ -1,0 +1,8 @@
+# Byte-compiled / native-compiled Emacs Lisp
+*.elc
+*.eln
+
+# Emacs backups / autosaves / lock files
+*~
+\#*\#
+.\#*
