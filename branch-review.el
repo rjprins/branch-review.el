@@ -1,8 +1,9 @@
-;;; branch-review.el --- Occur-style branch review over magit-diff + diff-hl  -*- lexical-binding: t; -*-
+;;; branch-review.el --- Occur-style branch review on magit + diff-hl  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2026 Rutger Prins
 
-;; Author: Rutger Prins
+;; Author: Rutger Prins <60062+rjprins@users.noreply.github.com>
+;; Maintainer: Rutger Prins <60062+rjprins@users.noreply.github.com>
 ;; URL: https://github.com/rjprins/branch-review.el
 ;; Version: 0.1.0
 ;; Package-Requires: ((emacs "28.1") (magit "3.3") (diff-hl "1.9"))
@@ -94,10 +95,6 @@
 
 (defcustom branch-review-skip-binary t
   "When non-nil, never auto-open binary files from overview point movement."
-  :type 'boolean)
-
-(defcustom branch-review-install-global-bindings t
-  "When non-nil, bind the `C-c r' command map on load."
   :type 'boolean)
 
 (defcustom branch-review-highlight-current-line t
@@ -565,7 +562,7 @@ PROMPT-BASE, prompt for the base branch."
 (defun branch-review-overview ()
   "Reopen the overview for the current repo, or start a review."
   (interactive)
-  (if-let ((ov (branch-review--overview)))
+  (if-let* ((ov (branch-review--overview)))
       (pop-to-buffer ov)
     (branch-review)))
 
@@ -600,7 +597,7 @@ PROMPT-BASE, prompt for the base branch."
       (let ((ok t))
         (dotimes (_ (abs n))
           (when ok (setq ok (branch-review--step-to pred (> n 0)))))))
-    (when-let ((win (get-buffer-window ov)))
+    (when-let* ((win (get-buffer-window ov)))
       (set-window-point win (with-current-buffer ov (point))))
     (branch-review--peek ov)))
 
@@ -640,11 +637,11 @@ PROMPT-BASE, prompt for the base branch."
     (define-key map "f" #'branch-review-next-file)
     (define-key map "b" #'branch-review-previous-file)
     map)
-  "Prefix keymap for `branch-review' commands, bound to `C-c r' by default.")
+  "Prefix keymap for `branch-review' commands.")
 (fset 'branch-review-command-map branch-review-command-map)
 
-(when branch-review-install-global-bindings
-  (global-set-key (kbd "C-c r") 'branch-review-command-map))
+;; This package does not grab any keys.  Bind the command map yourself, e.g.:
+;;   (keymap-global-set "C-c r" 'branch-review-command-map)
 
 (provide 'branch-review)
 ;;; branch-review.el ends here

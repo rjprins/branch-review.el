@@ -1,5 +1,7 @@
 # branch-review.el
 
+[![CI](https://github.com/rjprins/branch-review.el/actions/workflows/ci.yml/badge.svg)](https://github.com/rjprins/branch-review.el/actions/workflows/ci.yml)
+
 Review the changes on your current branch (or any worktree) inside Emacs,
 GitHub-pull-request style, **in your real file buffers** — without leaving your
 editor and without reinventing what [Magit](https://magit.vc) and
@@ -89,8 +91,16 @@ preview files, navigate with the keys below, and end the session with
 
 ### Commands and default keybindings
 
-`branch-review` installs a `C-c r` prefix map by default (disable with
-`branch-review-install-global-bindings`):
+`branch-review` provides a prefix command map, `branch-review-command-map`. It
+does not grab any keys — bind the map wherever you like:
+
+```elisp
+(keymap-global-set "C-c r" 'branch-review-command-map)        ; Emacs 29+
+;; or, on older Emacs:
+;; (global-set-key (kbd "C-c r") 'branch-review-command-map)
+```
+
+The keys below assume that `C-c r` binding:
 
 | Key                   | Command                     | Does                                                  |
 |-----------------------|-----------------------------|-------------------------------------------------------|
@@ -120,7 +130,6 @@ usual Magit diff keys still work there (`TAB` to fold, `n`/`p`, etc.).
 | `branch-review-open-sort`                | `commit-date`                            | Worktree ordering: `commit-date`, `mru`, or `alpha`           |
 | `branch-review-open-include-projectile`  | `t`                                      | Also offer git projects from `projectile-known-projects`      |
 | `branch-review-known-worktrees-file`     | `~/.emacs.d/branch-review-worktrees.eld` | Where the recent-worktree list is stored                      |
-| `branch-review-install-global-bindings`  | `t`                                      | Install the `C-c r` prefix map                                |
 
 ## How it works (and what it deliberately doesn't do)
 

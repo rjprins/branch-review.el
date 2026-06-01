@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Emacs ${{ matrix.emacs_version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        emacs_version: ['28.2', '29.4', '30.1', 'snapshot']
+        include:
+          - emacs_version: snapshot
+            allow_failure: true
+    continue-on-error: ${{ matrix.allow_failure == true }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Emacs ${{ matrix.emacs_version }}
+        uses: purcell/setup-emacs@master
+        with:
+          version: ${{ matrix.emacs_version }}
+
+      - name: Install dependencies
+        run: |
+          emacs -Q --batch --eval "(progn (require 'package) (setq package-archives '((\"gnu\" . \"https://elpa.gnu.org/packages/\") (\"nongnu\" . \"https://elpa.nongnu.org/nongnu/\") (\"melpa\" . \"https://melpa.org/packages/\"))) (package-initialize) (package-refresh-contents) (dolist (pkg '(magit diff-hl package-lint)) (unless (package-installed-p pkg) (package-install pkg))))"
+
+      - name: Byte-compile (warnings are errors)
+        run: |
+          emacs -Q --batch --eval "(progn (require 'package) (package-initialize) (setq byte-compile-error-on-warn t))" -L . -f batch-byte-compile branch-review.el
+
+      - name: package-lint
+        run: |
+          emacs -Q --batch --eval "(progn (require 'package) (setq package-archives '((\"gnu\" . \"https://elpa.gnu.org/packages/\") (\"nongnu\" . \"https://elpa.nongnu.org/nongnu/\") (\"melpa\" . \"https://melpa.org/packages/\"))) (package-initialize))" -L . -l package-lint -f package-lint-batch-and-exit branch-review.el
