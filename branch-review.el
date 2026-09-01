@@ -101,6 +101,10 @@
   "When non-nil, highlight the current line in the visited file buffer."
   :type 'boolean)
 
+(defcustom branch-review-show-header-line t
+  "When non-nil, show branch, worktree and base in the overview header line."
+  :type 'boolean)
+
 (cl-defstruct (branch-review-session (:constructor branch-review--make-session))
   root base merge-base overview touched enabled-diff-hl hl-line)
 
@@ -279,6 +283,25 @@ instead of replacing the overview."
 
 ;;;; Session lifecycle
 
+(defun branch-review--apply-header (session)
+  "Show SESSION's branch, worktree and base in the overview header line."
+  (let ((ov (branch-review-session-overview session)))
+    (when (and branch-review-show-header-line (buffer-live-p ov))
+      (let* ((root (branch-review-session-root session))
+             (branch (let ((default-directory root))
+                       (or (magit-get-current-branch)
+                           (magit-rev-abbrev "HEAD")))))
+        (with-current-buffer ov
+          (setq header-line-format
+                (list " "
+                      (propertize (or branch "?") 'face 'magit-branch-local)
+                      "  "
+                      (abbreviate-file-name root)
+                      "  "
+                      (propertize
+                       (concat "vs " (branch-review-session-base session))
+                       'face 'shadow))))))))
+
 (defun branch-review--overview ()
   "Return the live overview buffer for the current repo, or nil."
   (let* ((root (magit-toplevel))
@@ -311,6 +334,7 @@ instead of replacing the overview."
           (add-hook 'kill-buffer-hook #'branch-review--on-overview-kill nil t)
           (branch-review-overview-mode 1)
           (branch-review--goto-first-file))
+        (branch-review--apply-header session)
         (when branch-review-auto-open
           (branch-review--peek overview)))
       (message "Branch review: %s (merge-base %s)" base (magit-rev-abbrev mb))
@@ -340,6 +364,7 @@ Unless KEEP-OVERVIEW, also bury the overview window."
         (remove-hook 'post-command-hook #'branch-review--schedule-peek t)
         (when (bound-and-true-p branch-review-overview-mode)
           (branch-review-overview-mode -1))
+        (kill-local-variable 'header-line-format)
         (setq branch-review--session nil))
       (unless keep-overview
         (quit-windows-on ov))))
