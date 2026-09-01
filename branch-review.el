@@ -5,7 +5,7 @@
 ;; Author: Rutger Prins <60062+rjprins@users.noreply.github.com>
 ;; Maintainer: Rutger Prins <60062+rjprins@users.noreply.github.com>
 ;; URL: https://github.com/rjprins/branch-review.el
-;; Version: 0.1.0
+;; Version: 0.2.0
 ;; Package-Requires: ((emacs "28.1") (magit "3.3") (diff-hl "1.9"))
 ;; Keywords: vc, tools, convenience
 ;; SPDX-License-Identifier: GPL-3.0-or-later
