@@ -137,6 +137,8 @@ usual Magit diff keys still work there (`TAB` to fold, `n`/`p`, etc.).
 computed against `merge-base(base, HEAD)` using Git's on-disk view (committed +
 staged + unstaged saved changes), so review data refreshes after you save. It
 does **not** build synthetic per-file buffers or snapshot unsaved buffers.
+Review buffers use a buffer-local `diff-hl` reference revision, so starting a
+review does not repoint ordinary `diff-hl` markers in unrelated buffers.
 
 Because it leans on Magit and `diff-hl`, several fiddly things come for free:
 hunk parsing, rename/binary handling, and surviving `revert-buffer` /

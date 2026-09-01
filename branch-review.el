@@ -37,8 +37,8 @@
 ;;     `magit-diff-range' on the merge-base.  Magit's ordered section
 ;;     tree IS the flat hunk list; n/p/M-n/M-p, folding and RET all work.
 ;;
-;;   Marked-result mode         ->  `diff-hl' with its global reference
-;;     revision set to the merge-base (`diff-hl-set-reference-rev').
+;;   Marked-result mode         ->  `diff-hl' with a buffer-local reference
+;;     revision set to the merge-base (`diff-hl-reference-revision').
 ;;     diff-hl already survives `revert-buffer'/auto-revert, parses hunks,
 ;;     and renders fringe/margin marks.
 ;;
@@ -53,14 +53,13 @@
 ;;   * Cross-pane navigation: `branch-review-next-hunk' etc. drive the
 ;;     overview's section tree (crossing file boundaries) and re-peek, so
 ;;     both panes stay in sync even when invoked from the file buffer.
-;;   * Reliable teardown: reset diff-hl, disable any diff-hl-mode we turned
-;;     on, cancel timers, remove hooks, bury the overview.
+;;   * Reliable teardown: clear buffer-local review references, disable any
+;;     diff-hl-mode we turned on, cancel timers, remove hooks, bury the overview.
 ;;
 ;; Intentional deltas from the original spec: there is no separate synthetic
 ;; buffer for deleted files (Magit shows the removed content inline in the
 ;; overview) and no global marked/inline toggle (always-on marks + on-demand
-;; `diff-hl-show-hunk').  Per-repo only; diff-hl's reference rev is global, so
-;; reopening a review re-points it at that repo's merge-base.
+;; `diff-hl-show-hunk').
 
 ;;; Code:
 
@@ -102,7 +101,7 @@
   :type 'boolean)
 
 (cl-defstruct (branch-review-session (:constructor branch-review--make-session))
-  root base merge-base overview touched hl-line)
+  root base merge-base overview touched enabled-diff-hl hl-line)
 
 (defvar branch-review--sessions (make-hash-table :test 'equal)
   "Map of repository/worktree root -> `branch-review-session'.")
@@ -165,10 +164,14 @@ Return non-nil on success, leaving point unmoved on failure."
 (defun branch-review--ensure-diff-hl (buf session)
   "Make sure diff-hl is showing merge-base marks in BUF; record it on SESSION."
   (with-current-buffer buf
+    (when session
+      (setq-local diff-hl-reference-revision
+                  (branch-review-session-merge-base session))
+      (cl-pushnew buf (branch-review-session-touched session)))
     (unless (bound-and-true-p diff-hl-mode)
       (diff-hl-mode 1)
       (when session
-        (cl-pushnew buf (branch-review-session-touched session))))
+        (cl-pushnew buf (branch-review-session-enabled-diff-hl session))))
     (when (bound-and-true-p diff-hl-mode)
       (diff-hl-update))))
 
@@ -290,7 +293,6 @@ instead of replacing the overview."
                      (magit-read-branch-or-commit "Review against base"))))
          (mb (or (magit-git-string "merge-base" base "HEAD")
                  (user-error "No merge base between %s and HEAD" base))))
-    (diff-hl-set-reference-rev mb)
     ;; A single rev means "working tree relative to that rev", i.e. committed +
     ;; staged + unstaged changes since the merge-base.
     (magit-diff-range mb branch-review-diff-args)
@@ -314,10 +316,14 @@ instead of replacing the overview."
       session)))
 
 (defun branch-review--teardown (session &optional keep-overview)
-  "Reset diff-hl and disable modes/hooks/timers for SESSION.
+  "Clear review-local diff-hl state and disable modes/hooks/timers for SESSION.
 Unless KEEP-OVERVIEW, also bury the overview window."
-  (diff-hl-reset-reference-rev)
   (dolist (buf (branch-review-session-touched session))
+    (when (buffer-live-p buf)
+      (with-current-buffer buf
+        (kill-local-variable 'diff-hl-reference-revision)
+        (when (bound-and-true-p diff-hl-mode) (diff-hl-update)))))
+  (dolist (buf (branch-review-session-enabled-diff-hl session))
     (when (buffer-live-p buf)
       (with-current-buffer buf
         (when (bound-and-true-p diff-hl-mode) (diff-hl-mode -1)))))
@@ -527,8 +533,6 @@ and sorts them per `branch-review-open-sort'."
     (if (and existing (not prompt-base)
              (buffer-live-p (branch-review-session-overview existing)))
         (progn
-          ;; diff-hl's reference rev is global; re-assert this repo's.
-          (diff-hl-set-reference-rev (branch-review-session-merge-base existing))
           (pop-to-buffer (branch-review-session-overview existing)))
       (when existing (branch-review--teardown existing))
       (let ((default-directory root))
