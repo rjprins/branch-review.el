@@ -443,16 +443,20 @@ recently reviewed/seen worktrees first, `alpha' sorts by path."
 
 (defun branch-review--commit-times (shas)
   "Return committer Unix timestamps for SHAS (a list), in order.
-Nil shas map to 0; a failed lookup maps everything to 0."
-  (let ((real (delq nil (copy-sequence shas))))
-    (if (null real)
-        (mapcar (lambda (_) 0) shas)
-      (let ((table (make-hash-table :test 'equal))
-            (lines (ignore-errors
-                     (apply #'magit-git-lines "show" "-s" "--format=%ct" real))))
-        (cl-loop for sha in real for line in lines
-                 do (puthash sha (string-to-number line) table))
-        (mapcar (lambda (sha) (or (and sha (gethash sha table)) 0)) shas)))))
+Nil or unresolvable shas map to 0."
+  (let ((table (make-hash-table :test 'equal))
+        (real (delete-dups (delq nil (copy-sequence shas)))))
+    (when real
+      ;; Key by hash: `git show' dedupes revs on the same commit, so
+      ;; positional sha<->line pairing would misassign times.
+      (dolist (line (ignore-errors
+                      (apply #'magit-git-lines "show" "-s" "--format=%H %ct"
+                             real)))
+        (when (string-match "\\`\\([0-9a-f]+\\) \\([0-9]+\\)\\'" line)
+          (puthash (match-string 1 line)
+                   (string-to-number (match-string 2 line))
+                   table))))
+    (mapcar (lambda (sha) (or (and sha (gethash sha table)) 0)) shas)))
 
 (defun branch-review--open-candidates ()
   "Return (ROOT BRANCH . TS) review candidates.
