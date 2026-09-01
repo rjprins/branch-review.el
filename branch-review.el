@@ -66,6 +66,7 @@
 (require 'cl-lib)
 (require 'seq)
 (require 'tabulated-list)
+(require 'face-remap)
 (require 'magit)
 (require 'diff-hl)
 (require 'diff-hl-show-hunk)
@@ -105,6 +106,39 @@
   "When non-nil, show branch, worktree and base in the overview header line."
   :type 'boolean)
 
+(defcustom branch-review-change-highlight 'line
+  "How to mark changed lines in reviewed file buffers.
+`line' tints the background of added and modified lines and draws an
+overline where lines were removed, GitHub-style.  `marker' keeps
+diff-hl's normal rendering (fringe or margin indicators)."
+  :type '(choice (const line) (const marker)))
+
+(defface branch-review-inserted-line
+  '((((class color) (background light)) :background "#e6ffec" :extend t)
+    (((class color) (background dark)) :background "#16311f" :extend t)
+    (t :inherit diff-added))
+  "Face for added lines in reviewed file buffers.")
+
+(defface branch-review-changed-line
+  '((((class color) (background light)) :background "#ddf4ff" :extend t)
+    (((class color) (background dark)) :background "#12283c" :extend t)
+    (t :inherit diff-changed))
+  "Face for modified lines in reviewed file buffers.")
+
+(defface branch-review-removed-line
+  '((((class color) (background light)) :overline "#cf222e" :extend t)
+    (((class color) (background dark)) :overline "#ff7b72" :extend t)
+    (t :inherit diff-removed))
+  "Face for the line just below removed lines in reviewed file buffers.
+The removed content sat directly above the overline.")
+
+(defface branch-review-current-line
+  '((((class color) (background light)) :background "#fff8c5" :extend t)
+    (((class color) (background dark)) :background "#3a331a" :extend t)
+    (t :inherit hl-line))
+  "Face for the current line in reviewed file buffers.
+Remaps `hl-line' there while a review session is active.")
+
 (cl-defstruct (branch-review-session (:constructor branch-review--make-session))
   root base merge-base overview touched enabled-diff-hl hl-line)
 
@@ -115,6 +149,11 @@
   "The session this overview buffer belongs to.")
 (defvar-local branch-review--peek-timer nil)
 (defvar-local branch-review--last-peek-pos nil)
+(defvar-local branch-review--hl-line-cookie nil
+  "Face-remap cookie for `branch-review-current-line', or nil.")
+(defvar-local branch-review--saved-highlight-function nil
+  "Local `diff-hl-highlight-function' shadowed by the review, if any.
+The symbol `branch-review--unset' means there was no local binding.")
 
 ;;;; Base detection
 
@@ -166,6 +205,21 @@ Return non-nil on success, leaving point unmoved on failure."
                               (oref section end) t)
            t))))
 
+(defconst branch-review--tint-priority -60
+  "Overlay priority for line tints.
+Below hl-line's -50, so the current-line highlight stays visible.")
+
+(defun branch-review--highlight-on-line (ovl type _shape)
+  "Render a diff-hl change of TYPE as a whole-line highlight on OVL.
+Used as `diff-hl-highlight-function' in reviewed file buffers when
+`branch-review-change-highlight' is `line'."
+  (move-overlay ovl (point) (line-beginning-position 2))
+  (overlay-put ovl 'priority branch-review--tint-priority)
+  (overlay-put ovl 'face (pcase type
+                           ('insert 'branch-review-inserted-line)
+                           ('delete 'branch-review-removed-line)
+                           (_ 'branch-review-changed-line))))
+
 (defun branch-review--ensure-diff-hl (buf session)
   "Make sure diff-hl is showing merge-base marks in BUF; record it on SESSION."
   (with-current-buffer buf
@@ -177,6 +231,18 @@ Return non-nil on success, leaving point unmoved on failure."
       (diff-hl-mode 1)
       (when session
         (cl-pushnew buf (branch-review-session-enabled-diff-hl session))))
+    ;; After enabling the mode, so this wins over diff-hl-margin-mode's
+    ;; own buffer-local value (which we save and restore on teardown).
+    (when (and session (eq branch-review-change-highlight 'line)
+               (bound-and-true-p diff-hl-mode)
+               (not (eq diff-hl-highlight-function
+                        #'branch-review--highlight-on-line)))
+      (setq branch-review--saved-highlight-function
+            (if (local-variable-p 'diff-hl-highlight-function)
+                diff-hl-highlight-function
+              'branch-review--unset))
+      (setq-local diff-hl-highlight-function
+                  #'branch-review--highlight-on-line))
     (when (bound-and-true-p diff-hl-mode)
       (diff-hl-update))))
 
@@ -209,7 +275,10 @@ cleanup), refresh the highlight at point, and recenter if off-screen."
         (setq-local hl-line-sticky-flag t)
         (hl-line-mode 1)
         (when session
-          (cl-pushnew buf (branch-review-session-hl-line session)))))
+          (cl-pushnew buf (branch-review-session-hl-line session))))
+      (when (and session (not branch-review--hl-line-cookie))
+        (setq branch-review--hl-line-cookie
+              (face-remap-add-relative 'hl-line 'branch-review-current-line))))
     (with-selected-window win
       (when (fboundp 'hl-line-highlight)
         (hl-line-highlight))
@@ -347,6 +416,15 @@ Unless KEEP-OVERVIEW, also bury the overview window."
     (when (buffer-live-p buf)
       (with-current-buffer buf
         (kill-local-variable 'diff-hl-reference-revision)
+        (when branch-review--saved-highlight-function
+          (if (eq branch-review--saved-highlight-function 'branch-review--unset)
+              (kill-local-variable 'diff-hl-highlight-function)
+            (setq-local diff-hl-highlight-function
+                        branch-review--saved-highlight-function))
+          (kill-local-variable 'branch-review--saved-highlight-function))
+        (when branch-review--hl-line-cookie
+          (face-remap-remove-relative branch-review--hl-line-cookie)
+          (kill-local-variable 'branch-review--hl-line-cookie))
         (when (bound-and-true-p diff-hl-mode) (diff-hl-update)))))
   (dolist (buf (branch-review-session-enabled-diff-hl session))
     (when (buffer-live-p buf)

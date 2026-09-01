@@ -34,8 +34,13 @@ editor and without reinventing what [Magit](https://magit.vc) and
 - **Occur-style navigation.** Move point through the overview and the file at
   point opens in the other window after a short delay, without stealing focus.
   Deleted and binary files are skipped.
+- **Changed lines highlighted in the buffer.** Added and modified lines get a
+  subtle background tint and removed positions an overline, GitHub-style. Set
+  `branch-review-change-highlight` to `marker` for classic diff-hl
+  fringe/margin indicators instead.
 - **The change you're on, highlighted.** The current line is highlighted in the
-  file buffer (via `hl-line`) and follows you as you move between hunks.
+  file buffer (via `hl-line`, remapped to a light yellow review face) and
+  follows you as you move between hunks.
 - **Session context at a glance.** The overview's header line shows the branch
   under review, its worktree, and the base branch.
 - **`RET` opens into the file window**, keeping the overview visible instead of
@@ -83,8 +88,9 @@ git clone https://github.com/rjprins/branch-review.el ~/src/branch-review.el
 (require 'branch-review)
 ```
 
-> **No fringes?** `diff-hl` draws its change markers in the fringe by default. If
-> you run without fringes, enable margin rendering so the markers show up:
+> **No fringes?** With the default `line` highlight style this doesn't matter.
+> If you use `branch-review-change-highlight` set to `marker` and run without
+> fringes, enable margin rendering so the markers show up:
 > `(diff-hl-margin-mode 1)`.
 
 ## Usage
@@ -134,10 +140,15 @@ usual Magit diff keys still work there (`TAB` to fold, `n`/`p`, etc.).
 | `branch-review-auto-open-delay`          | `0.2`                                    | Idle delay (seconds) before auto-open                         |
 | `branch-review-skip-binary`              | `t`                                      | Don't auto-open binary files                                  |
 | `branch-review-highlight-current-line`   | `t`                                      | Highlight the current line in the file buffer                 |
+| `branch-review-change-highlight`         | `line`                                   | `line` tints changed lines; `marker` keeps fringe/margin marks |
 | `branch-review-show-header-line`         | `t`                                      | Show branch, worktree and base in the overview header line    |
 | `branch-review-open-sort`                | `commit-date`                            | Worktree ordering: `commit-date`, `mru`, or `alpha`           |
 | `branch-review-open-include-projectile`  | `t`                                      | Also offer git projects from `projectile-known-projects`      |
 | `branch-review-known-worktrees-file`     | `~/.emacs.d/branch-review-worktrees.eld` | Where the recent-worktree list is stored                      |
+
+Colors are plain faces you can customize: `branch-review-inserted-line`,
+`branch-review-changed-line`, `branch-review-removed-line`, and
+`branch-review-current-line` (the current-line highlight).
 
 ## How it works (and what it deliberately doesn't do)
 
