@@ -65,6 +65,7 @@
 
 (require 'cl-lib)
 (require 'seq)
+(require 'tabulated-list)
 (require 'magit)
 (require 'diff-hl)
 (require 'diff-hl-show-hunk)
@@ -629,6 +630,115 @@ PROMPT-BASE, prompt for the base branch."
   (interactive)
   (branch-review--navigate #'branch-review--diff-file-p -1))
 
+;;;; Worktree list buffer
+
+(defun branch-review--worktree-list-column-width (rows col fallback)
+  "Return the width of column COL over ROWS, at least FALLBACK."
+  (max fallback
+       (or (cl-loop for r in rows
+                    maximize (string-width (aref (cadr r) col)))
+           0)))
+
+(defun branch-review--worktree-list-entries ()
+  "Compute `tabulated-list-entries' for the worktrees of this repo.
+Also fit the Branch and Age column widths to the current rows."
+  (let* ((current (file-name-as-directory (expand-file-name (magit-toplevel))))
+         (wts (seq-remove (lambda (w) (nth 3 w)) (magit-list-worktrees)))
+         (ages (branch-review--commit-times (mapcar (lambda (w) (nth 1 w)) wts)))
+         (rows
+          (cl-loop
+           for w in wts for ts in ages
+           for root = (file-name-as-directory (expand-file-name (nth 0 w)))
+           for session = (gethash root branch-review--sessions)
+           collect
+           (list root
+                 (vector
+                  (if (and session
+                           (buffer-live-p (branch-review-session-overview session)))
+                      (propertize "•" 'face 'success)
+                    " ")
+                  (if-let* ((branch (nth 2 w)))
+                      (propertize branch 'face (if (equal root current)
+                                                   'magit-branch-current
+                                                 'magit-branch-local))
+                    (propertize (or (magit-rev-abbrev (nth 1 w)) "?")
+                                'face 'magit-hash))
+                  (propertize (or (branch-review--relative-age ts) "")
+                              'face 'shadow)
+                  (abbreviate-file-name root))))))
+    (setq tabulated-list-format
+          (vector
+           '("" 1 nil)
+           (list "Branch"
+                 (branch-review--worktree-list-column-width rows 1 6) t)
+           (list "Age"
+                 (branch-review--worktree-list-column-width rows 2 3)
+                 nil :right-align t)
+           '("Path" 0 t)))
+    (tabulated-list-init-header)
+    rows))
+
+(defun branch-review--worktree-list-goto (root)
+  "Move point to the row for ROOT, or to the first row."
+  (goto-char (point-min))
+  (while (and (not (eobp))
+              (not (equal (tabulated-list-get-id) root)))
+    (forward-line 1))
+  (when (eobp) (goto-char (point-min))))
+
+(defun branch-review-worktree-list-review (&optional prompt-base)
+  "Start (or reopen) a branch review on the worktree at point.
+With prefix arg PROMPT-BASE, prompt for the base branch."
+  (interactive "P")
+  (let ((root (or (tabulated-list-get-id)
+                  (user-error "No worktree on this line")))
+        (list-buf (current-buffer)))
+    (unless (file-directory-p root)
+      (user-error "Worktree directory %s is missing" root))
+    (branch-review--open-root root prompt-base)
+    ;; Refresh the review-active dot without moving point.
+    (when (buffer-live-p list-buf)
+      (with-current-buffer list-buf (revert-buffer)))))
+
+(defvar branch-review-worktree-list-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "RET") #'branch-review-worktree-list-review)
+    map)
+  "Keymap for `branch-review-worktree-list-mode'.")
+
+(define-derived-mode branch-review-worktree-list-mode tabulated-list-mode
+  "BR-Worktrees"
+  "Major mode listing every worktree of a Git repository.
+A dot marks worktrees with an active review session.
+\\<branch-review-worktree-list-mode-map>Type \
+\\[branch-review-worktree-list-review] to review the worktree at point."
+  ;; Placeholder; the entries function refits the widths on every print.
+  (setq tabulated-list-format
+        [("" 1 nil) ("Branch" 35 t) ("Age" 3 nil :right-align t) ("Path" 0 t)])
+  (setq tabulated-list-entries #'branch-review--worktree-list-entries)
+  (tabulated-list-init-header))
+
+;;;###autoload
+(defun branch-review-worktrees ()
+  "List all worktrees of the current repository in a buffer.
+`RET' on a worktree starts (or reopens) a branch review for it;
+`g' refreshes the list."
+  (interactive)
+  (let* ((root (or (magit-toplevel) (user-error "Not inside a Git repository")))
+         (default-directory root)
+         (main (caar (magit-list-worktrees)))
+         (buf (get-buffer-create
+               (format "*branch-review-worktrees: %s*"
+                       (file-name-nondirectory
+                        (directory-file-name (or main root)))))))
+    (with-current-buffer buf
+      (setq default-directory root)
+      (branch-review-worktree-list-mode)
+      (tabulated-list-print)
+      (branch-review--worktree-list-goto
+       (file-name-as-directory (expand-file-name root))))
+    (pop-to-buffer buf)))
+
 ;;;; Keymap
 
 (defvar branch-review-command-map
@@ -637,6 +747,7 @@ PROMPT-BASE, prompt for the base branch."
     (define-key map "w" #'branch-review-with-base)
     (define-key map "o" #'branch-review-open)
     (define-key map "O" #'branch-review-overview)
+    (define-key map "l" #'branch-review-worktrees)
     (define-key map "q" #'branch-review-quit)
     (define-key map "g" #'branch-review-refresh)
     (define-key map "t" #'diff-hl-show-hunk)        ; on-demand inline view

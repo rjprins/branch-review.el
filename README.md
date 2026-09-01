@@ -28,6 +28,9 @@ editor and without reinventing what [Magit](https://magit.vc) and
   including every *sibling* worktree of repos you know — sorted by most recent
   commit and annotated with branch and age. Built for a worktree-per-ticket
   flow.
+- **A worktree overview buffer.** `M-x branch-review-worktrees` lists every
+  worktree of the current repo — branch, age, path, and a dot for worktrees
+  with an active review. `RET` starts a review on the worktree at point.
 - **Occur-style navigation.** Move point through the overview and the file at
   point opens in the other window after a short delay, without stealing focus.
   Deleted and binary files are skipped.
@@ -84,8 +87,9 @@ git clone https://github.com/rjprins/branch-review.el ~/src/branch-review.el
 
 ## Usage
 
-Start a review with `M-x branch-review` from anywhere inside a Git repository, or
-pick a worktree with `M-x branch-review-open`. Move point through the overview to
+Start a review with `M-x branch-review` from anywhere inside a Git repository,
+pick a worktree with `M-x branch-review-open`, or browse this repo's worktrees
+with `M-x branch-review-worktrees`. Move point through the overview to
 preview files, navigate with the keys below, and end the session with
 `branch-review-quit`.
 
@@ -106,6 +110,7 @@ The keys below assume that `C-c r` binding:
 |-----------------------|-----------------------------|-------------------------------------------------------|
 | `C-c r r`             | `branch-review`             | Review current repo (or reopen); `C-u` prompts for base |
 | `C-c r o`             | `branch-review-open`        | Pick a recent/seen worktree to review                 |
+| `C-c r l`             | `branch-review-worktrees`   | List this repo's worktrees; `RET` reviews one         |
 | `C-c r w`             | `branch-review-with-base`   | Review, prompting for the base branch                 |
 | `C-c r O`             | `branch-review-overview`    | Reopen the overview                                   |
 | `C-c r q`             | `branch-review-quit`        | End the review and clean up                           |
