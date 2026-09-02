@@ -246,15 +246,26 @@ Used as `diff-hl-highlight-function' in reviewed file buffers when
     (when (bound-and-true-p diff-hl-mode)
       (diff-hl-update))))
 
+(defun branch-review--file-window-p (win overview-win)
+  "Non-nil when WIN can host a reviewed file buffer.
+Excludes OVERVIEW-WIN plus dedicated and side windows (such as the
+minimap), which are not part of the overview + file window pair."
+  (and (window-live-p win)
+       (not (eq win overview-win))
+       (not (window-dedicated-p win))
+       (not (window-parameter win 'window-side))))
+
 (defun branch-review--display (buf pos overview)
   "Show BUF at POS in a window other than OVERVIEW's, without selecting it.
-Return the window used."
+Return the window used.  Only ordinary windows are considered; the
+minimap and other dedicated or side windows are left alone."
   (let* ((ov-win (and (buffer-live-p overview) (get-buffer-window overview)))
          (win (or (get-buffer-window buf)
-                  (seq-find (lambda (w) (not (eq w ov-win)))
+                  (seq-find (lambda (w) (branch-review--file-window-p w ov-win))
                             (window-list nil 'no-minibuf))
                   (and ov-win (split-window ov-win nil 'right))
-                  (selected-window))))
+                  (and (branch-review--file-window-p (selected-window) ov-win)
+                       (selected-window)))))
     (when (window-live-p win)
       (unless (eq (window-buffer win) buf)
         (set-window-buffer win buf))
