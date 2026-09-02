@@ -296,6 +296,14 @@ cleanup), refresh the highlight at point, and recenter if off-screen."
       (unless (pos-visible-in-window-p (point) win)
         (recenter)))))
 
+(defun branch-review--visit-noselect ()
+  "Visit the diff file at point without selecting it; return (BUF POS).
+Reviewed files change on disk (new commits, agents); silently re-read
+stale buffers without unsaved edits instead of prompting on each peek.
+Buffers with real unsaved edits still get Emacs's usual warning."
+  (let ((revert-without-query '(".*")))
+    (ignore-errors (magit-diff-visit-file--noselect t))))
+
 (defun branch-review--peek (overview)
   "Open the worktree file at point in OVERVIEW in another window, no focus steal."
   (when (and (buffer-live-p overview)
@@ -310,8 +318,7 @@ cleanup), refresh the highlight at point, and recenter if off-screen."
               (when (and (file-regular-p full)            ; skip deleted/missing
                          (not (and branch-review-skip-binary
                                    (branch-review--file-binary-p section))))
-                (pcase-let ((`(,buf ,pos)
-                             (ignore-errors (magit-diff-visit-file--noselect t))))
+                (pcase-let ((`(,buf ,pos) (branch-review--visit-noselect)))
                   (when (buffer-live-p buf)
                     (branch-review--ensure-diff-hl buf branch-review--session)
                     (let ((win (branch-review--display buf pos overview)))
@@ -337,7 +344,7 @@ Unlike Magit's `RET', this keeps the overview visible and reuses the
 window the overview opens files into, instead of replacing the overview."
   (interactive)
   (let* ((file (ignore-errors (magit-diff--file)))
-         (res (and file (ignore-errors (magit-diff-visit-file--noselect t)))))
+         (res (and file (branch-review--visit-noselect))))
     (cond
      ((and res (buffer-live-p (car res)))
       (pcase-let ((`(,buf ,pos) res))
